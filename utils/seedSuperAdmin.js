@@ -10,21 +10,15 @@ const seedSuperAdmin = async () => {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('✅ Connected to MongoDB');
 
-    // Check if super admin already exists
-    const existingAdmin = await User.findOne({ role: 'super_admin' });
-    
-    if (existingAdmin) {
-      console.log('⚠️  Super Admin already exists:');
-      console.log(`   Email: ${existingAdmin.email}`);
-      console.log('   Skipping seed...');
-      process.exit(0);
-    }
+    // Delete any existing super admins first
+    await User.deleteMany({ role: 'super_admin' });
+    console.log('🗑️  Cleared existing super admins');
 
-    // Create super admin
+    // Create new super admin
     const superAdmin = await User.create({
       name: process.env.SUPER_ADMIN_NAME || 'Md Mijanur Molla',
-      email: process.env.SUPER_ADMIN_EMAIL || 'mdmijanur.molla@edulearnix.com',
-      password: process.env.SUPER_ADMIN_PASSWORD || 'SuperAdmin@123',
+      email: process.env.SUPER_ADMIN_EMAIL || 'md.mijanur@edulearnix.in',
+      password: process.env.SUPER_ADMIN_PASSWORD || 'Mijanur@9735',
       role: 'super_admin',
       status: 'approved',
     });
@@ -35,7 +29,6 @@ const seedSuperAdmin = async () => {
     console.log(`   Email: ${superAdmin.email}`);
     console.log(`   Role:  ${superAdmin.role}`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('⚠️  Please change the password after first login!');
     
     process.exit(0);
   } catch (error) {
