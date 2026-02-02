@@ -21,9 +21,28 @@ const blogSchema = new mongoose.Schema(
       type: String,
       maxlength: [300, 'Excerpt cannot exceed 300 characters'],
     },
+    shortDescription: {
+      type: String,
+      maxlength: [500, 'Short description cannot exceed 500 characters'],
+    },
     category: {
       type: String,
-      enum: ['Tech Blog', 'Career Tips', 'Interview Guide', 'Tutorial', 'News', 'Others'],
+      enum: [
+        'Tech Blog',
+        'Career Tips',
+        'Interview Guide',
+        'Tutorial',
+        'News',
+        'Trending Tech News',
+        'Interesting Facts',
+        'Daily Coding',
+        'Software Developer',
+        'Web Development',
+        'AI & Machine Learning',
+        'Mobile Development',
+        'DevOps & Cloud',
+        'Others'
+      ],
       default: 'Others',
     },
     tags: [{

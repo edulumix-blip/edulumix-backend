@@ -32,7 +32,7 @@ const migrateContributorData = async () => {
     // Update all Jobs
     const jobsUpdated = await Job.updateMany(
       {},
-      { $set: { contributor: superAdmin._id } }
+      { $set: { postedBy: superAdmin._id } }
     );
     console.log(`✅ Updated ${jobsUpdated.modifiedCount} jobs`);
 
@@ -46,7 +46,7 @@ const migrateContributorData = async () => {
     // Update all Resources
     const resourcesUpdated = await Resource.updateMany(
       {},
-      { $set: { contributor: superAdmin._id } }
+      { $set: { postedBy: superAdmin._id } }
     );
     console.log(`✅ Updated ${resourcesUpdated.modifiedCount} resources`);
 
