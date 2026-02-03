@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: edulearnix-backend
+    name: edulumix-backend
     runtime: node
     plan: free
     buildCommand: npm install

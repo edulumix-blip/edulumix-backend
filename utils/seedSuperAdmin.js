@@ -17,7 +17,7 @@ const seedSuperAdmin = async () => {
     // Create new super admin
     const superAdmin = await User.create({
       name: process.env.SUPER_ADMIN_NAME || 'Md Mijanur Molla',
-      email: process.env.SUPER_ADMIN_EMAIL || 'md.mijanur@edulearnix.in',
+      email: process.env.SUPER_ADMIN_EMAIL || 'md.mijanur@edulumix.in',
       password: process.env.SUPER_ADMIN_PASSWORD || 'Mijanur@9735',
       role: 'super_admin',
       status: 'approved',

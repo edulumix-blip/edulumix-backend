@@ -14,7 +14,7 @@ npm-debug.log*
 
 # Migration scripts
 scripts/
-config/edulearnix-service-account.json
+config/edulumix-service-account.json
 
 # Temporary files
 *.tmp

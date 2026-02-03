@@ -30,8 +30,8 @@ const allowedOrigins = [
   'http://localhost:5175',
   'http://10.59.50.240:5173', // Local network for mobile testing
   process.env.CLIENT_URL, // Production frontend URL
-  'https://edulearnix.in', // Custom domain
-  'https://www.edulearnix.in', // www subdomain
+  'https://edulumix.in', // Custom domain
+  'https://www.edulumix.in', // www subdomain
 ].filter(Boolean);
 
 const corsOptions = {
@@ -73,7 +73,7 @@ app.use('/api/claims', claimRoutes);
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     success: true,
-    message: 'EduLearnix API is running',
+    message: 'EduLumix API is running',
     timestamp: new Date().toISOString(),
   });
 });
@@ -81,7 +81,7 @@ app.get('/api/health', (req, res) => {
 // Root route
 app.get('/', (req, res) => {
   res.json({
-    message: 'Welcome to EduLearnix API',
+    message: 'Welcome to EduLumix API',
     version: '1.0.0',
     docs: '/api/health',
   });
@@ -97,7 +97,7 @@ app.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
-║   🚀 EduLearnix Server Started Successfully!                ║
+║   🚀 EduLumix Server Started Successfully!                ║
 ║                                                            ║
 ║   📍 Server running on: http://localhost:${PORT}              ║
 ║   🌍 Environment: ${process.env.NODE_ENV || 'development'}                            ║
