@@ -102,6 +102,8 @@ blogSchema.pre('save', function (next) {
 
 // Index for search
 blogSchema.index({ title: 'text', content: 'text', tags: 'text' });
+blogSchema.index({ author: 1, createdAt: -1 });
+blogSchema.index({ isPublished: 1, isDeleted: 1, category: 1 });
 
 const Blog = mongoose.model('Blog', blogSchema);
 

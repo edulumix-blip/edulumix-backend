@@ -1,5 +1,6 @@
 import User from '../models/User.js';
 import generateToken from '../utils/generateToken.js';
+import { validatePasswordStrength } from '../utils/passwordValidation.js';
 
 // @desc    Register new user (sends request for approval)
 // @route   POST /api/auth/signup
@@ -7,6 +8,15 @@ import generateToken from '../utils/generateToken.js';
 export const signup = async (req, res) => {
   try {
     const { name, email, password, confirmPassword, role } = req.body;
+
+    // Validate password strength
+    const pwdCheck = validatePasswordStrength(password);
+    if (!pwdCheck.valid) {
+      return res.status(400).json({
+        success: false,
+        message: pwdCheck.message,
+      });
+    }
 
     // Validate confirm password
     if (password !== confirmPassword) {
@@ -251,6 +261,12 @@ export const changePassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body;
 
     const user = await User.findById(req.user.id).select('+password');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
 
     // Check current password
     const isMatch = await user.matchPassword(currentPassword);
@@ -258,6 +274,15 @@ export const changePassword = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Current password is incorrect',
+      });
+    }
+
+    // Validate new password strength
+    const pwdCheck = validatePasswordStrength(newPassword);
+    if (!pwdCheck.valid) {
+      return res.status(400).json({
+        success: false,
+        message: pwdCheck.message,
       });
     }
 

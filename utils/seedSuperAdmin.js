@@ -6,8 +6,13 @@ dotenv.config();
 
 const seedSuperAdmin = async () => {
   try {
+    const { MONGO_URI, SUPER_ADMIN_NAME, SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD } = process.env;
+    if (!MONGO_URI || !SUPER_ADMIN_NAME || !SUPER_ADMIN_EMAIL || !SUPER_ADMIN_PASSWORD) {
+      throw new Error('Missing required env vars: MONGO_URI, SUPER_ADMIN_NAME, SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD');
+    }
+
     // Connect to MongoDB
-    await mongoose.connect(process.env.MONGO_URI);
+    await mongoose.connect(MONGO_URI);
     console.log('✅ Connected to MongoDB');
 
     // Delete any existing super admins first
@@ -16,9 +21,9 @@ const seedSuperAdmin = async () => {
 
     // Create new super admin
     const superAdmin = await User.create({
-      name: process.env.SUPER_ADMIN_NAME || 'Md Mijanur Molla',
-      email: process.env.SUPER_ADMIN_EMAIL || 'md.mijanur@edulumix.in',
-      password: process.env.SUPER_ADMIN_PASSWORD || 'Mijanur@9735',
+      name: SUPER_ADMIN_NAME,
+      email: SUPER_ADMIN_EMAIL,
+      password: SUPER_ADMIN_PASSWORD,
       role: 'super_admin',
       status: 'approved',
     });

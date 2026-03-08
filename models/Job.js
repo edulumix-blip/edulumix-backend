@@ -111,7 +111,7 @@ jobSchema.pre('save', function(next) {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '');
-    this.slug = `${titleSlug}-${companySlug}-${this._id}`;
+    this.slug = `${titleSlug}-${companySlug}-${this._id || Date.now()}`;
   }
   next();
 });
@@ -132,6 +132,8 @@ jobSchema.pre('save', function(next) {
 
 // Index for search
 jobSchema.index({ title: 'text', company: 'text', description: 'text' });
+jobSchema.index({ postedBy: 1, createdAt: -1 });
+jobSchema.index({ category: 1, status: 1, isDeleted: 1 });
 
 const Job = mongoose.model('Job', jobSchema);
 

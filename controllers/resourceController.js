@@ -181,12 +181,17 @@ export const updateResource = async (req, res) => {
       });
     }
 
-    // Update isVideo if link changed
-    if (req.body.link) {
-      req.body.isVideo = req.body.link.includes('youtube.com') || req.body.link.includes('youtu.be');
+    // Whitelist updatable fields (prevent override of postedBy, likes, downloads, etc.)
+    const allowedFields = ['title', 'category', 'subcategory', 'link', 'description', 'thumbnail'];
+    const updateData = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) updateData[field] = req.body[field];
+    }
+    if (updateData.link) {
+      updateData.isVideo = updateData.link.includes('youtube.com') || updateData.link.includes('youtu.be');
     }
 
-    resource = await Resource.findByIdAndUpdate(req.params.id, req.body, {
+    resource = await Resource.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true,
     });

@@ -1,5 +1,7 @@
 import User from '../models/User.js';
 
+const VALID_ROLES = ['resource_poster', 'job_poster', 'blog_poster', 'tech_blog_poster', 'digital_product_poster', 'others'];
+
 // @desc    Get all public users (for homepage contributors)
 // @route   GET /api/users/all-public
 // @access  Public
@@ -258,6 +260,13 @@ export const unblockUser = async (req, res) => {
       });
     }
 
+    if (user.role === 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot unblock super admin',
+      });
+    }
+
     user.status = 'approved';
     await user.save();
 
@@ -300,6 +309,13 @@ export const changeUserRole = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: 'Cannot assign super admin role',
+      });
+    }
+
+    if (!role || !VALID_ROLES.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}`,
       });
     }
 

@@ -1,4 +1,5 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import {
   signup,
   login,
@@ -10,9 +11,18 @@ import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// Public routes
-router.post('/signup', signup);
-router.post('/login', login);
+// Rate limiting for auth (10 req/min per IP for login/signup)
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { success: false, message: 'Too many attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Public routes (with rate limiting)
+router.post('/signup', authLimiter, signup);
+router.post('/login', authLimiter, login);
 
 // Protected routes
 router.get('/me', protect, getMe);

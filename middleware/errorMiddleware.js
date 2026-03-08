@@ -24,9 +24,14 @@ const errorHandler = (err, req, res, next) => {
       .join(', ');
   }
 
+  // In production, avoid exposing internal error details for 5xx
+  const safeMessage = (statusCode >= 500 && process.env.NODE_ENV === 'production')
+    ? 'Something went wrong. Please try again later.'
+    : message;
+
   res.status(statusCode).json({
     success: false,
-    message,
+    message: safeMessage,
     stack: process.env.NODE_ENV === 'production' ? null : err.stack,
   });
 };

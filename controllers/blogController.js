@@ -132,10 +132,12 @@ export const getBlogBySlug = async (req, res) => {
 // @access  Private (blog_poster, tech_blog_poster, super_admin)
 export const createBlog = async (req, res) => {
   try {
+    const content = req.body.content || '';
+    const excerpt = req.body.excerpt || (content ? content.substring(0, 200) + '...' : '');
     const blogData = {
       ...req.body,
       author: req.user.id,
-      excerpt: req.body.excerpt || req.body.content.substring(0, 200) + '...',
+      excerpt,
     };
 
     const blog = await Blog.create(blogData);
@@ -189,7 +191,14 @@ export const updateBlog = async (req, res) => {
       });
     }
 
-    blog = await Blog.findByIdAndUpdate(req.params.id, req.body, {
+    // Whitelist updatable fields (prevent override of author, views, likes, etc.)
+    const allowedFields = ['title', 'content', 'excerpt', 'shortDescription', 'category', 'tags', 'coverImage', 'isPublished', 'isFeatured'];
+    const updateData = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) updateData[field] = req.body[field];
+    }
+
+    blog = await Blog.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true,
     });

@@ -14,9 +14,16 @@ import productRoutes from './routes/productRoutes.js';
 import courseRoutes from './routes/courseRoutes.js';
 import mockTestRoutes from './routes/mockTestRoutes.js';
 import claimRoutes from './routes/claimRoutes.js';
+import chatRoutes from './routes/chatRoutes.js';
 
 // Load env vars
 dotenv.config();
+
+// Validate critical env vars at startup
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+  console.error('❌ JWT_SECRET must be set and at least 32 characters long');
+  process.exit(1);
+}
 
 // Connect to database
 connectDB();
@@ -25,6 +32,7 @@ const app = express();
 
 // CORS configuration
 const allowedOrigins = [
+  'http://localhost:3045',
   'http://localhost:5173',
   'http://localhost:5174', 
   'http://localhost:5175',
@@ -68,6 +76,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/mocktests', mockTestRoutes);
 app.use('/api/claims', claimRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {

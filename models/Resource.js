@@ -72,6 +72,8 @@ const resourceSchema = new mongoose.Schema(
 
 // Index for search
 resourceSchema.index({ title: 'text', category: 'text', subcategory: 'text' });
+resourceSchema.index({ postedBy: 1, createdAt: -1 });
+resourceSchema.index({ category: 1, isDeleted: 1 });
 
 const Resource = mongoose.model('Resource', resourceSchema);
 
