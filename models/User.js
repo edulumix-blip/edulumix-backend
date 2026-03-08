@@ -22,9 +22,16 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
+      required: function () {
+        return !this.firebaseUid;
+      },
       minlength: [8, 'Password must be at least 8 characters'],
       select: false, // Don't return password by default
+    },
+    firebaseUid: {
+      type: String,
+      default: null,
+      sparse: true, // Allow multiple nulls
     },
     role: {
       type: String,
@@ -97,17 +104,19 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Hash password before saving
+// Hash password before saving (skip if no password e.g. Firebase-only users)
 userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) {
-    next();
+  if (!this.isModified('password') || !this.password) {
+    return next();
   }
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
+  next();
 });
 
-// Compare password method
+// Compare password method (Firebase users have no password)
 userSchema.methods.matchPassword = async function (enteredPassword) {
+  if (!this.password) return false;
   return await bcrypt.compare(enteredPassword, this.password);
 };
 

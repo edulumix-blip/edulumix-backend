@@ -1,6 +1,7 @@
 import User from '../models/User.js';
 import generateToken from '../utils/generateToken.js';
 import { validatePasswordStrength } from '../utils/passwordValidation.js';
+import { verifyFirebaseToken } from '../config/firebaseAdmin.js';
 
 // @desc    Register new user (sends request for approval)
 // @route   POST /api/auth/signup
@@ -157,6 +158,101 @@ export const login = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message || 'Error during login',
+    });
+  }
+};
+
+// @desc    Login with Firebase ID token (Google/Email)
+// @route   POST /api/auth/firebase-login
+// @access  Public
+export const firebaseLogin = async (req, res) => {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Firebase ID token is required',
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = await verifyFirebaseToken(idToken);
+    } catch (err) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired Firebase token',
+      });
+    }
+
+    const { uid, email, name, picture } = decoded;
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email not found in Firebase token',
+      });
+    }
+
+    let user = await User.findOne({ $or: [{ email }, { firebaseUid: uid }] });
+
+    if (!user) {
+      user = await User.create({
+        name: name || email.split('@')[0],
+        email,
+        firebaseUid: uid,
+        role: 'others',
+        status: 'approved',
+        avatar: picture || '',
+      });
+    } else if (!user.firebaseUid) {
+      user.firebaseUid = uid;
+      if (picture) user.avatar = picture;
+      await user.save({ validateBeforeSave: false });
+    }
+
+    if (user.status === 'pending') {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account is pending approval. Please wait for admin approval.',
+        status: 'pending',
+      });
+    }
+
+    if (user.status === 'rejected' || user.status === 'blocked') {
+      return res.status(403).json({
+        success: false,
+        message: user.status === 'blocked'
+          ? 'Your account has been blocked. Please contact admin.'
+          : `Your account was rejected. Reason: ${user.rejectionReason || 'Not specified'}`,
+        status: user.status,
+      });
+    }
+
+    user.lastLogin = new Date();
+    await user.save({ validateBeforeSave: false });
+
+    res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      data: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        avatar: user.avatar,
+        points: user.points,
+        totalEarnings: user.totalEarnings,
+        claimedMilestones: user.claimedMilestones || [],
+        token: generateToken(user._id),
+      },
+    });
+  } catch (error) {
+    console.error('Firebase Login Error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error during Firebase login',
     });
   }
 };
