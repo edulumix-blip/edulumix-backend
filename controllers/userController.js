@@ -12,7 +12,8 @@ export const getAllPublicUsers = async (req, res) => {
       role: { $ne: 'super_admin' }
     })
       .select('name role avatar status')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(20);
 
     res.status(200).json(users);
   } catch (error) {
