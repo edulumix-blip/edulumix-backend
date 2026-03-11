@@ -61,6 +61,20 @@ const blogSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isSponsored: {
+      type: Boolean,
+      default: false,
+    },
+    sponsorName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    sponsorLink: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     views: {
       type: Number,
       default: 0,
@@ -82,6 +96,13 @@ const blogSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    source: {
+      type: String,
+      enum: ['manual', 'devto', 'medium'],
+      default: 'manual',
+    },
+    externalId: { type: String, default: '' },
+    externalLink: { type: String, default: '' },
   },
   {
     timestamps: true,

@@ -11,10 +11,14 @@ import {
   togglePublish,
   toggleFeatured,
   getCoursesCount,
+  fetchExternalCourses,
 } from '../controllers/courseController.js';
 import { protect, superAdminOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+// Super Admin only - fetch external courses (MUST be before /:id)
+router.post('/fetch-external', protect, superAdminOnly, fetchExternalCourses);
 
 // Admin routes (Super Admin only) - MUST come before parameterized routes
 router.get('/all', protect, superAdminOnly, getAllCourses);

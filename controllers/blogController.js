@@ -1,5 +1,20 @@
 import Blog from '../models/Blog.js';
 import User from '../models/User.js';
+import { runExternalBlogFetch } from '../utils/runBlogFetch.js';
+
+// @desc    Fetch tech blogs from Dev.to, Medium, HN etc (Super Admin only)
+// @route   POST /api/blogs/fetch-external
+// @access  Private (super_admin only)
+export const fetchExternalBlogs = async (req, res) => {
+  try {
+    const opts = req.body || {};
+    const data = await runExternalBlogFetch(opts);
+    res.status(200).json({ success: true, message: 'Tech blogs fetched and stored', data });
+  } catch (error) {
+    console.error('fetchExternalBlogs error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 // @desc    Get all blogs (Super Admin - includes unpublished and soft-deleted)
 // @route   GET /api/blogs/all
@@ -51,7 +66,7 @@ export const getBlogs = async (req, res) => {
 
     const blogs = await Blog.find(query)
       .populate('author', 'name email avatar role')
-      .sort({ createdAt: -1 })
+      .sort({ isSponsored: -1, createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
@@ -192,7 +207,7 @@ export const updateBlog = async (req, res) => {
     }
 
     // Whitelist updatable fields (prevent override of author, views, likes, etc.)
-    const allowedFields = ['title', 'content', 'excerpt', 'shortDescription', 'category', 'tags', 'coverImage', 'isPublished', 'isFeatured'];
+    const allowedFields = ['title', 'content', 'excerpt', 'shortDescription', 'category', 'tags', 'coverImage', 'isPublished', 'isFeatured', 'isSponsored', 'sponsorName', 'sponsorLink'];
     const updateData = {};
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) updateData[field] = req.body[field];

@@ -1,8 +1,14 @@
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import mongoSanitize from 'express-mongo-sanitize';
 import dotenv from 'dotenv';
 import connectDB from './config/db.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
+import { startDailyJobFetchCron } from './cron/dailyJobFetch.js';
+import { startDailyResourceFetchCron } from './cron/dailyResourceFetch.js';
+import { startDailyCourseFetchCron } from './cron/dailyCourseFetch.js';
 
 // Route imports
 import authRoutes from './routes/authRoutes.js';
@@ -28,14 +34,23 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
 // Connect to database
 connectDB();
 
+// Start daily job fetch cron (Adzuna + JSearch at scheduled time)
+startDailyJobFetchCron();
+// Start daily resource fetch cron (Dev.to, freeCodeCamp, Hashnode, YouTube)
+startDailyResourceFetchCron();
+startDailyCourseFetchCron();
+
 const app = express();
 
 // CORS configuration
 const allowedOrigins = [
   'http://localhost:3045',
+  'http://localhost:3046',
   'http://localhost:5173',
-  'http://localhost:5174', 
+  'http://localhost:5174',
   'http://localhost:5175',
+  'http://127.0.0.1:3045',
+  'http://127.0.0.1:5173',
   'http://10.59.50.240:5173', // Local network for mobile testing
   process.env.CLIENT_URL, // Production frontend URL
   'https://edulumix.in', // Custom domain
@@ -61,10 +76,25 @@ const corsOptions = {
   optionsSuccessStatus: 200,
 };
 
-// Middleware
+// Middleware - Helmet: allow cross-origin for API (frontend on different port)
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(mongoSanitize()); // Prevent NoSQL injection ($ and . in keys)
+
+// General API rate limiting (100 req/15 min per IP)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { success: false, message: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api', apiLimiter);
 
 // API Routes
 app.use('/api/auth', authRoutes);

@@ -9,12 +9,14 @@ import {
   deleteBlog,
   likeBlog,
   getMyBlogs,
+  fetchExternalBlogs,
 } from '../controllers/blogController.js';
 import { protect, canPostBlogs, superAdminOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 // Protected routes (MUST come before parameterized routes)
+router.post('/fetch-external', protect, superAdminOnly, fetchExternalBlogs);
 router.get('/my/blogs', protect, getMyBlogs);
 router.get('/all', protect, superAdminOnly, getAllBlogs);
 

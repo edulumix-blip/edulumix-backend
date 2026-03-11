@@ -177,11 +177,27 @@ const courseSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    source: {
+      type: String,
+      enum: ['udemy', 'manual'],
+      default: 'manual',
+    },
+    externalId: {
+      type: String,
+      default: '',
+    },
+    // Store full API response as-is (for udemy-free-courses etc.)
+    rawApiData: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+courseSchema.index({ source: 1, externalId: 1 }, { sparse: true });
 
 // Generate slug before saving
 courseSchema.pre('save', function (next) {

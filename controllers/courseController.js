@@ -1,5 +1,27 @@
 import Course from '../models/Course.js';
 import User from '../models/User.js';
+import { runExternalCourseFetch } from '../utils/runCourseFetch.js';
+
+// @desc    Fetch courses from Udemy (Super Admin only)
+// @route   POST /api/courses/fetch-external
+// @access  Private (super_admin only)
+export const fetchExternalCourses = async (req, res) => {
+  try {
+    const { limit = 15 } = req.body || {};
+    const data = await runExternalCourseFetch(limit);
+    res.status(200).json({
+      success: true,
+      message: 'External courses fetched and stored',
+      data,
+    });
+  } catch (error) {
+    console.error('fetchExternalCourses error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // @desc    Get all courses (public - only published)
 // @route   GET /api/courses

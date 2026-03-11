@@ -1,5 +1,27 @@
 import Resource from '../models/Resource.js';
 import User from '../models/User.js';
+import { runExternalResourceFetch } from '../utils/runResourceFetch.js';
+
+// @desc    Fetch resources from Dev.to, freeCodeCamp, Hashnode, YouTube (Super Admin only)
+// @route   POST /api/resources/fetch-external
+// @access  Private (super_admin only)
+export const fetchExternalResources = async (req, res) => {
+  try {
+    const opts = req.body || {};
+    const data = await runExternalResourceFetch(opts);
+    res.status(200).json({
+      success: true,
+      message: 'External resources fetched and stored',
+      data,
+    });
+  } catch (error) {
+    console.error('fetchExternalResources error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // @desc    Get all resources (public, super_admin sees all including deleted)
 // @route   GET /api/resources
@@ -19,7 +41,10 @@ export const getResources = async (req, res) => {
     if (category) query.category = category;
     if (subcategory) query.subcategory = { $regex: subcategory, $options: 'i' };
     if (search) {
-      query.$text = { $search: search };
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+      ];
     }
 
     const resources = await Resource.find(query)
@@ -63,8 +88,9 @@ export const getResourcesGrouped = async (req, res) => {
 
     const groupedResources = {};
 
+    const baseQuery = { isDeleted: { $ne: true } };
     for (const category of categories) {
-      const resources = await Resource.find({ category })
+      const resources = await Resource.find({ ...baseQuery, category })
         .populate('postedBy', 'name email avatar role')
         .sort({ createdAt: -1 })
         .limit(8);
@@ -72,7 +98,7 @@ export const getResourcesGrouped = async (req, res) => {
       if (resources.length > 0) {
         groupedResources[category] = {
           resources,
-          total: await Resource.countDocuments({ category }),
+          total: await Resource.countDocuments({ ...baseQuery, category }),
         };
       }
     }

@@ -9,10 +9,14 @@ import {
   deleteJob,
   likeJob,
   getMyJobs,
+  fetchExternalJobs,
 } from '../controllers/jobController.js';
-import { protect, canPostJobs, optionalAuth } from '../middleware/authMiddleware.js';
+import { protect, canPostJobs, optionalAuth, superAdminOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+// Super Admin only - fetch external jobs (MUST be before /:id)
+router.post('/fetch-external', protect, superAdminOnly, fetchExternalJobs);
 
 // Protected routes (MUST come before parameterized routes)
 router.get('/my/jobs', protect, getMyJobs);

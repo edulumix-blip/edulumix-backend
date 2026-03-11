@@ -9,6 +9,11 @@ import {
   changePassword,
 } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
+import {
+  signupValidation,
+  loginValidation,
+  handleValidationErrors,
+} from '../middleware/validateMiddleware.js';
 
 const router = express.Router();
 
@@ -21,9 +26,9 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Public routes (with rate limiting)
-router.post('/signup', authLimiter, signup);
-router.post('/login', authLimiter, login);
+// Public routes (with rate limiting + validation)
+router.post('/signup', authLimiter, signupValidation, handleValidationErrors, signup);
+router.post('/login', authLimiter, loginValidation, handleValidationErrors, login);
 router.post('/firebase-login', authLimiter, firebaseLogin);
 
 // Protected routes

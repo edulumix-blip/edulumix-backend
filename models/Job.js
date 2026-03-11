@@ -94,6 +94,16 @@ const jobSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    source: {
+      type: String,
+      enum: ['adzuna', 'jsearch', 'manual'],
+      default: 'manual',
+    },
+    externalId: {
+      type: String,
+      default: null,
+      sparse: true,
+    },
   },
   {
     timestamps: true,
@@ -134,6 +144,7 @@ jobSchema.pre('save', function(next) {
 jobSchema.index({ title: 'text', company: 'text', description: 'text' });
 jobSchema.index({ postedBy: 1, createdAt: -1 });
 jobSchema.index({ category: 1, status: 1, isDeleted: 1 });
+jobSchema.index({ source: 1, externalId: 1 }, { sparse: true });
 
 const Job = mongoose.model('Job', jobSchema);
 

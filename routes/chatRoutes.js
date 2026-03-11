@@ -1,9 +1,10 @@
 import express from 'express';
 import Groq from 'groq-sdk';
+import { chatValidation, handleValidationErrors } from '../middleware/validateMiddleware.js';
 
 const router = express.Router();
 
-router.post('/', async (req, res) => {
+router.post('/', chatValidation, handleValidationErrors, async (req, res) => {
   try {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {

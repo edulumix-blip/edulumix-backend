@@ -9,10 +9,14 @@ import {
   likeResource,
   incrementDownload,
   getMyResources,
+  fetchExternalResources,
 } from '../controllers/resourceController.js';
-import { protect, canPostResources, optionalAuth } from '../middleware/authMiddleware.js';
+import { protect, canPostResources, optionalAuth, superAdminOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+// Super Admin only - fetch external resources (MUST be before /:id)
+router.post('/fetch-external', protect, superAdminOnly, fetchExternalResources);
 
 // Protected routes (MUST come before parameterized routes)
 router.get('/my/resources', protect, getMyResources);

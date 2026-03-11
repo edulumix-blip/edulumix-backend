@@ -1,5 +1,28 @@
 import Job from '../models/Job.js';
 import User from '../models/User.js';
+import { runExternalJobFetch } from '../utils/runJobFetch.js';
+
+// @desc    Fetch jobs from Adzuna + JSearch and store in DB (Super Admin only)
+// @route   POST /api/jobs/fetch-external
+// @access  Private (super_admin only)
+export const fetchExternalJobs = async (req, res) => {
+  try {
+    const { adzunaLimit = 20, jsearchPages = 2 } = req.body || {};
+    const data = await runExternalJobFetch(adzunaLimit, jsearchPages);
+
+    res.status(200).json({
+      success: true,
+      message: 'External jobs fetched and stored',
+      data,
+    });
+  } catch (error) {
+    console.error('fetchExternalJobs error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // @desc    Get all jobs (public, super_admin sees all including deleted)
 // @route   GET /api/jobs

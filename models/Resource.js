@@ -64,6 +64,15 @@ const resourceSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    source: {
+      type: String,
+      enum: ['devto', 'freecodecamp', 'hashnode', 'youtube', 'medium', 'hackernews', 'manual'],
+      default: 'manual',
+    },
+    externalId: {
+      type: String,
+      default: '',
+    },
   },
   {
     timestamps: true,
@@ -74,6 +83,7 @@ const resourceSchema = new mongoose.Schema(
 resourceSchema.index({ title: 'text', category: 'text', subcategory: 'text' });
 resourceSchema.index({ postedBy: 1, createdAt: -1 });
 resourceSchema.index({ category: 1, isDeleted: 1 });
+resourceSchema.index({ source: 1, externalId: 1 }, { sparse: true });
 
 const Resource = mongoose.model('Resource', resourceSchema);
 
