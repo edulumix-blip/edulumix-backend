@@ -202,7 +202,7 @@ export const firebaseLogin = async (req, res) => {
         email,
         firebaseUid: uid,
         role: 'others',
-        status: 'approved',
+        status: 'pending',
         avatar: picture || '',
       });
     } else if (!user.firebaseUid) {

@@ -1,6 +1,6 @@
 import Job from '../models/Job.js';
 import User from '../models/User.js';
-import { runExternalJobFetch } from '../utils/runJobFetch.js';
+import { runExternalJobFetch, syncClosedStatusFromSource } from '../utils/runJobFetch.js';
 
 // @desc    Fetch jobs from Adzuna + JSearch and store in DB (Super Admin only)
 // @route   POST /api/jobs/fetch-external
@@ -17,6 +17,27 @@ export const fetchExternalJobs = async (req, res) => {
     });
   } catch (error) {
     console.error('fetchExternalJobs error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Sync closed status from Adzuna/JSearch (mark jobs no longer in API results as Closed)
+// @route   POST /api/jobs/sync-closed
+// @access  Private (super_admin only)
+export const syncClosedJobs = async (req, res) => {
+  try {
+    const { adzunaLimit = 20, jsearchPages = 2 } = req.body || {};
+    const data = await syncClosedStatusFromSource(adzunaLimit, jsearchPages);
+    res.status(200).json({
+      success: true,
+      message: data.closed > 0 ? `${data.closed} job(s) marked as Closed` : 'No jobs to sync (all still open on source)',
+      data,
+    });
+  } catch (error) {
+    console.error('syncClosedJobs error:', error);
     res.status(500).json({
       success: false,
       message: error.message,
@@ -95,8 +116,9 @@ export const getJobsGrouped = async (req, res) => {
 
     const groupedJobs = {};
 
+    const baseQuery = (!req.user || req.user.role !== 'super_admin') ? { isDeleted: { $ne: true } } : {};
     for (const category of categories) {
-      const jobs = await Job.find({ category })
+      const jobs = await Job.find({ ...baseQuery, category })
         .populate('postedBy', 'name avatar')
         .sort({ createdAt: -1 })
         .limit(6);
@@ -104,7 +126,7 @@ export const getJobsGrouped = async (req, res) => {
       if (jobs.length > 0) {
         groupedJobs[category] = {
           jobs,
-          total: await Job.countDocuments({ category }),
+          total: await Job.countDocuments({ ...baseQuery, category }),
         };
       }
     }
@@ -127,6 +149,13 @@ export const getJobsGrouped = async (req, res) => {
 export const getJob = async (req, res) => {
   try {
     const job = await Job.findById(req.params.id).populate('postedBy', 'name email avatar role');
+    if (job.isDeleted && (!req.user || req.user.role !== 'super_admin')) {
+      return res.status(404).json({
+        success: false,
+        message: 'Job not found',
+      });
+    }
+
 
     if (!job) {
       return res.status(404).json({
@@ -212,7 +241,27 @@ export const updateJob = async (req, res) => {
       });
     }
 
-    job = await Job.findByIdAndUpdate(req.params.id, req.body, {
+    const allowedFields = [
+      'title',
+      'company',
+      'location',
+      'category',
+      'experience',
+      'salary',
+      'status',
+      'companyLogo',
+      'applyLink',
+      'description',
+      'source',
+      'externalId',
+      'closedSyncedAt',
+    ];
+    const updateData = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) updateData[field] = req.body[field];
+    }
+
+    job = await Job.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true,
     });
@@ -351,6 +400,13 @@ export const likeJob = async (req, res) => {
 export const getJobBySlug = async (req, res) => {
   try {
     const job = await Job.findOne({ slug: req.params.slug }).populate('postedBy', 'name email avatar role');
+    if (job.isDeleted && (!req.user || req.user.role !== 'super_admin')) {
+      return res.status(404).json({
+        success: false,
+        message: 'Job not found',
+      });
+    }
+
 
     if (!job) {
       return res.status(404).json({

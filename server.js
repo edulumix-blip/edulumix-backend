@@ -4,6 +4,11 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import mongoSanitize from 'express-mongo-sanitize';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import connectDB from './config/db.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 import { startDailyJobFetchCron } from './cron/dailyJobFetch.js';
@@ -13,6 +18,9 @@ import { startDailyCourseFetchCron } from './cron/dailyCourseFetch.js';
 // Route imports
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import { getAllPublicUsers } from './controllers/userController.js';
+import { getResources } from './controllers/resourceController.js';
+import { optionalAuth } from './middleware/authMiddleware.js';
 import jobRoutes from './routes/jobRoutes.js';
 import resourceRoutes from './routes/resourceRoutes.js';
 import blogRoutes from './routes/blogRoutes.js';
@@ -22,8 +30,8 @@ import mockTestRoutes from './routes/mockTestRoutes.js';
 import claimRoutes from './routes/claimRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 
-// Load env vars
-dotenv.config();
+// Load env vars (from backend/.env even when run from project root)
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 // Validate critical env vars at startup
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
@@ -34,16 +42,28 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
 // Connect to database
 connectDB();
 
-// Start daily job fetch cron (Adzuna + JSearch at scheduled time)
-startDailyJobFetchCron();
-// Start daily resource fetch cron (Dev.to, freeCodeCamp, Hashnode, YouTube)
-startDailyResourceFetchCron();
-startDailyCourseFetchCron();
+const cronEnabled = process.env.ENABLE_CRON_JOBS !== 'false';
+if (cronEnabled) {
+  // Start background schedulers only on designated instance(s)
+  startDailyJobFetchCron();
+  startDailyResourceFetchCron();
+  startDailyCourseFetchCron();
+} else {
+  console.log('⏸️  Cron jobs disabled (ENABLE_CRON_JOBS=false)');
+}
 
 const app = express();
 
 // CORS configuration
+const envCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((v) => v.trim())
+  .filter(Boolean);
+
 const allowedOrigins = [
+  'http://localhost:5000', // Same-port mode (frontend + backend)
+  'http://127.0.0.1:5000',
+  'http://localhost:3023',
   'http://localhost:3045',
   'http://localhost:3046',
   'http://localhost:5173',
@@ -55,22 +75,27 @@ const allowedOrigins = [
   process.env.CLIENT_URL, // Production frontend URL
   'https://edulumix.in', // Custom domain
   'https://www.edulumix.in', // www subdomain
+  ...envCorsOrigins,
 ].filter(Boolean);
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, curl, etc.)
+    // Allow requests with no origin (same-origin, Postman, curl, etc.)
     if (!origin) return callback(null, true);
-    
-    // Check if origin is allowed (includes Firebase domains)
-    if (allowedOrigins.includes(origin) || 
-        origin.endsWith('.netlify.app') || 
-        origin.endsWith('.web.app') || 
-        origin.endsWith('.firebaseapp.com')) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+    // Allow localhost / 127.0.0.1 hosts for local dev only
+    try {
+      const parsedOrigin = new URL(origin);
+      if (parsedOrigin.hostname === 'localhost' || parsedOrigin.hostname === '127.0.0.1') {
+        return callback(null, true);
+      }
+    } catch (error) {
+      return callback(new Error('Invalid Origin header'));
     }
+    // Check allowed list (Firebase, production domains)
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   optionsSuccessStatus: 200,
@@ -86,6 +111,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(mongoSanitize()); // Prevent NoSQL injection ($ and . in keys)
 
+// Serve static files FIRST (before API) - so /assets/*, *.js, *.css work correctly
+const frontendDist = path.resolve(__dirname, '../frontend/dist');
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist, { index: false }));
+}
+
 // General API rate limiting (100 req/15 min per IP)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -98,8 +129,12 @@ app.use('/api', apiLimiter);
 
 // API Routes
 app.use('/api/auth', authRoutes);
+// Public contributors list – register before /api/users so /all-public is not matched as :id
+app.get('/api/users/all-public', getAllPublicUsers);
 app.use('/api/users', userRoutes);
 app.use('/api/jobs', jobRoutes);
+// GET /api/resources – register explicitly so it always matches (avoids 404 when router path is empty)
+app.get('/api/resources', optionalAuth, getResources);
 app.use('/api/resources', resourceRoutes);
 app.use('/api/blogs', blogRoutes);
 app.use('/api/products', productRoutes);
@@ -117,14 +152,20 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Root route
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Welcome to EduLumix API',
-    version: '1.0.0',
-    docs: '/api/health',
+// SPA fallback - serve index.html for non-API, non-file routes
+if (fs.existsSync(frontendDist)) {
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(frontendDist, 'index.html'), (err) => {
+      if (err) next(err);
+    });
   });
-});
+  console.log('📱 Frontend served from same port');
+} else {
+  app.get('/', (req, res) => {
+    res.json({ message: 'Welcome to EduLumix API', version: '1.0.0', docs: '/api/health' });
+  });
+}
 
 // Error handling middleware
 app.use(notFound);

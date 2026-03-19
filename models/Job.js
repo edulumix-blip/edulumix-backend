@@ -104,6 +104,10 @@ const jobSchema = new mongoose.Schema(
       default: null,
       sparse: true,
     },
+    closedSyncedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

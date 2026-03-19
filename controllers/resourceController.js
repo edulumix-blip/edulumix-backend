@@ -121,6 +121,13 @@ export const getResourcesGrouped = async (req, res) => {
 export const getResource = async (req, res) => {
   try {
     const resource = await Resource.findById(req.params.id).populate('postedBy', 'name email avatar role');
+    if (resource.isDeleted && (!req.user || req.user.role !== 'super_admin')) {
+      return res.status(404).json({
+        success: false,
+        message: 'Resource not found',
+      });
+    }
+
 
     if (!resource) {
       return res.status(404).json({

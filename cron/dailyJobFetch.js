@@ -1,12 +1,12 @@
 /**
  * Cron job: Fetch jobs from Adzuna + JSearch at scheduled intervals.
- * Default: every 3 hours (0:00, 3:00, 6:00, 9:00, 12:00, 15:00, 18:00, 21:00 IST)
+ * After fetch, sync closed status (mark jobs no longer in API results as Closed).
  */
 import cron from 'node-cron';
-import { runExternalJobFetch } from '../utils/runJobFetch.js';
+import { runExternalJobFetch, syncClosedStatusFromSource } from '../utils/runJobFetch.js';
 
 const ENABLED = process.env.JOB_FETCH_CRON_ENABLED !== 'false';
-const SCHEDULE = process.env.JOB_FETCH_CRON_SCHEDULE || '0 */3 * * *'; // Every 3 hours
+const SCHEDULE = process.env.JOB_FETCH_CRON_SCHEDULE || '0 * * * *'; // Every hour (same as blog)
 const TIMEZONE = process.env.JOB_FETCH_CRON_TIMEZONE || 'Asia/Kolkata';
 
 let scheduledTask = null;
@@ -29,9 +29,16 @@ export function startDailyJobFetchCron() {
       const elapsed = ((Date.now() - start) / 1000).toFixed(1);
       console.log(
         `📥 [Cron] Job fetch completed in ${elapsed}s: created=${result.created}, skipped=${result.skipped}, ` +
-        `adzuna=${result.adzunaFetched}, jsearch=${result.jsearchFetched}` + 
+        `adzuna=${result.adzunaFetched}, jsearch=${result.jsearchFetched}` +
         (result.errors?.length ? `, errors=${result.errors.length}` : '')
       );
+      const sync = await syncClosedStatusFromSource(20, 2);
+      if (sync.closed > 0) {
+        console.log(`🔒 [Cron] Sync closed: ${sync.closed} jobs (adzuna=${sync.adzunaClosed}, jsearch=${sync.jsearchClosed})`);
+      }
+      if (sync.errors?.length) {
+        console.warn(`⚠️ [Cron] Sync closed had ${sync.errors.length} API error(s)`);
+      }
     } catch (err) {
       console.error('❌ [Cron] Job fetch failed:', err.message);
     }
@@ -41,7 +48,7 @@ export function startDailyJobFetchCron() {
     timezone: TIMEZONE,
   });
 
-  console.log(`⏰ Job fetch cron scheduled: every 3 hours (${SCHEDULE}) - ${TIMEZONE}`);
+  console.log(`⏰ Job fetch cron scheduled: every hour (${SCHEDULE}) - ${TIMEZONE}`);
 }
 
 export function stopDailyJobFetchCron() {

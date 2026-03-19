@@ -21,19 +21,28 @@ export const fetchExternalBlogs = async (req, res) => {
 // @access  Private (super_admin only)
 export const getAllBlogs = async (req, res) => {
   try {
-    const { author } = req.query;
-    
+    const { author, category, isPublished, search, page = 1, limit = 50 } = req.query;
+
     const query = {};
     // Super admin sees ALL blogs including soft-deleted
     if (author) query.author = author;
+    if (category) query.category = category;
+    if (isPublished !== undefined && isPublished !== '') query.isPublished = isPublished === 'true' || isPublished === true;
+    if (search) query.$or = [{ title: { $regex: search, $options: 'i' } }, { excerpt: { $regex: search, $options: 'i' } }];
 
+    const total = await Blog.countDocuments(query);
     const blogs = await Blog.find(query)
       .populate('author', 'name email avatar role')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
 
     res.status(200).json({
       success: true,
       count: blogs.length,
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: parseInt(page),
       data: blogs,
     });
   } catch (error) {
@@ -93,7 +102,12 @@ export const getBlogs = async (req, res) => {
 // @access  Public
 export const getFeaturedBlogs = async (req, res) => {
   try {
-    const blogs = await Blog.find({ isPublished: true, isFeatured: true })
+    const query = { isPublished: true, isFeatured: true };
+    if (!req.user || req.user.role !== 'super_admin') {
+      query.isDeleted = { $ne: true };
+    }
+
+    const blogs = await Blog.find(query)
       .populate('author', 'name email avatar role')
       .sort({ createdAt: -1 })
       .limit(5);
@@ -116,7 +130,12 @@ export const getFeaturedBlogs = async (req, res) => {
 // @access  Public
 export const getBlogBySlug = async (req, res) => {
   try {
-    const blog = await Blog.findOne({ slug: req.params.slug, isPublished: true })
+    const query = { slug: req.params.slug, isPublished: true };
+    if (!req.user || req.user.role !== 'super_admin') {
+      query.isDeleted = { $ne: true };
+    }
+
+    const blog = await Blog.findOne(query)
       .populate('author', 'name email avatar bio role');
 
     if (!blog) {

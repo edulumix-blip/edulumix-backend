@@ -153,3 +153,32 @@ export async function fetchAllExternalJobs(adzunaLimit = 20, jsearchPages = 2) {
 
   return results;
 }
+
+/**
+ * Get current external job IDs from both APIs (same limits as cron).
+ * Used to sync closed status: jobs not in this set are considered closed on source.
+ * @param {number} adzunaLimit - Results per page for Adzuna
+ * @param {number} jsearchPages - Number of pages for JSearch
+ * @returns {Promise<{ adzuna: Set<string>, jsearch: Set<string>, errors: Array }>}
+ */
+export async function getCurrentExternalJobIds(adzunaLimit = 20, jsearchPages = 2) {
+  const adzunaIds = new Set();
+  const jsearchIds = new Set();
+  const errors = [];
+
+  try {
+    const adzunaJobs = await fetchFromAdzuna(adzunaLimit);
+    adzunaJobs.forEach((j) => adzunaIds.add(String(j.externalId)));
+  } catch (e) {
+    errors.push({ source: 'adzuna', message: e.message });
+  }
+
+  try {
+    const jsearchJobs = await fetchFromJSearch(jsearchPages);
+    jsearchJobs.forEach((j) => jsearchIds.add(String(j.externalId)));
+  } catch (e) {
+    errors.push({ source: 'jsearch', message: e.message });
+  }
+
+  return { adzuna: adzunaIds, jsearch: jsearchIds, errors };
+}

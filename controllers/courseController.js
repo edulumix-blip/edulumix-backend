@@ -154,7 +154,7 @@ export const getFeaturedCourses = async (req, res) => {
 // @access  Public
 export const getCourse = async (req, res) => {
   try {
-    const course = await Course.findOne({ slug: req.params.slug })
+    const course = await Course.findOne({ slug: req.params.slug, isPublished: true })
       .populate('postedBy', 'name email avatar');
 
     if (!course) {
@@ -246,13 +246,44 @@ export const updateCourse = async (req, res) => {
       });
     }
 
-    // Recalculate totals if lessons are updated
-    if (req.body.lessons) {
-      req.body.totalLessons = req.body.lessons.length;
-      req.body.totalDuration = req.body.lessons.reduce((acc, lesson) => acc + (lesson.duration || 0), 0);
+    const allowedFields = [
+      'title',
+      'description',
+      'shortDescription',
+      'thumbnail',
+      'previewVideo',
+      'category',
+      'level',
+      'language',
+      'actualPrice',
+      'offerPrice',
+      'isFree',
+      'lessons',
+      'instructor',
+      'features',
+      'requirements',
+      'whatYouWillLearn',
+      'tags',
+      'enrollmentLink',
+      'whatsappNumber',
+      'isPublished',
+      'isFeatured',
+      'source',
+      'externalId',
+      'rawApiData',
+    ];
+    const updateData = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) updateData[field] = req.body[field];
     }
 
-    course = await Course.findByIdAndUpdate(req.params.id, req.body, {
+    // Recalculate totals if lessons are updated
+    if (updateData.lessons) {
+      updateData.totalLessons = updateData.lessons.length;
+      updateData.totalDuration = updateData.lessons.reduce((acc, lesson) => acc + (lesson.duration || 0), 0);
+    }
+
+    course = await Course.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true,
     });

@@ -237,7 +237,24 @@ export const updateProduct = async (req, res) => {
       });
     }
 
-    product = await DigitalProduct.findByIdAndUpdate(req.params.id, req.body, {
+    const allowedFields = [
+      'name',
+      'category',
+      'subcategory',
+      'description',
+      'thumbnail',
+      'actualPrice',
+      'offerPrice',
+      'whatsappNumber',
+      'isAvailable',
+      'isFeatured',
+    ];
+    const updateData = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) updateData[field] = req.body[field];
+    }
+
+    product = await DigitalProduct.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true,
     });

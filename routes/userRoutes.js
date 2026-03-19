@@ -17,15 +17,15 @@ import { protect, superAdminOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// Public route - no auth required (for homepage contributors section)
+// Public route MUST be before any /:id to avoid "all-public" being matched as id
 router.get('/all-public', getAllPublicUsers);
 
 // All other routes require authentication and super admin access
 router.use(protect, superAdminOnly);
 
-router.get('/', getAllUsers);
 router.get('/pending', getPendingUsers);
 router.get('/approved', getApprovedUsers);
+router.get('/', getAllUsers);
 router.get('/stats', getDashboardStats);
 router.get('/:id', getUserById);
 

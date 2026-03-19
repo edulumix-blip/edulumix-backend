@@ -135,7 +135,7 @@ export const getFeaturedMockTests = async (req, res) => {
 // @access  Public
 export const getMockTest = async (req, res) => {
   try {
-    const test = await MockTest.findOne({ slug: req.params.slug })
+    const test = await MockTest.findOne({ slug: req.params.slug, isPublished: true })
       .populate('postedBy', 'name email avatar');
 
     if (!test) {
@@ -236,13 +236,36 @@ export const updateMockTest = async (req, res) => {
       });
     }
 
-    // Recalculate totals if questions are updated
-    if (req.body.questions) {
-      req.body.totalQuestions = req.body.questions.length;
-      req.body.totalMarks = req.body.questions.reduce((acc, q) => acc + (q.marks || 1), 0);
+    const allowedFields = [
+      'title',
+      'description',
+      'thumbnail',
+      'category',
+      'company',
+      'difficulty',
+      'duration',
+      'questions',
+      'instructions',
+      'tags',
+      'isFree',
+      'price',
+      'isPublished',
+      'isFeatured',
+      'whatsappNumber',
+      'passingMarks',
+    ];
+    const updateData = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) updateData[field] = req.body[field];
     }
 
-    test = await MockTest.findByIdAndUpdate(req.params.id, req.body, {
+    // Recalculate totals if questions are updated
+    if (updateData.questions) {
+      updateData.totalQuestions = updateData.questions.length;
+      updateData.totalMarks = updateData.questions.reduce((acc, q) => acc + (q.marks || 1), 0);
+    }
+
+    test = await MockTest.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true,
     });
@@ -349,11 +372,18 @@ export const toggleFeatured = async (req, res) => {
 };
 
 // @desc    Submit test result (increment attempts)
-// @route   PUT /api/mocktests/:id/submit
-// @access  Public
+// @route   POST /api/mocktests/:id/submit
+// @access  Private
 export const submitTestResult = async (req, res) => {
   try {
-    const { score } = req.body;
+    const rawScore = req.body?.score ?? req.body?.answers?.score;
+    const score = Number(rawScore);
+    if (!Number.isFinite(score) || score < 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid score is required',
+      });
+    }
     const test = await MockTest.findById(req.params.id);
 
     if (!test) {

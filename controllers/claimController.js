@@ -1,5 +1,6 @@
 import Claim from '../models/Claim.js';
 import User from '../models/User.js';
+import { applyClaimStatusEffects, isValidClaimStatusTransition } from '../utils/claimStatusRules.js';
 
 // @desc    Create a new claim request
 // @route   POST /api/claims
@@ -174,8 +175,18 @@ export const updateClaim = async (req, res) => {
       });
     }
 
+    const previousStatus = claim.status;
+    const nextStatus = status || claim.status;
+
+    if (!isValidClaimStatusTransition(previousStatus, nextStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid claim status transition: ${previousStatus} -> ${nextStatus}`,
+      });
+    }
+
     // Update claim
-    claim.status = status || claim.status;
+    claim.status = nextStatus;
     claim.transactionId = transactionId || claim.transactionId;
     claim.notes = notes || claim.notes;
     claim.processedBy = req.user.id;
@@ -183,21 +194,10 @@ export const updateClaim = async (req, res) => {
 
     await claim.save();
 
-    // If paid, update user's total earnings
-    if (status === 'paid') {
+    // Apply side effects only on status transition to keep operation idempotent
+    if (previousStatus !== nextStatus) {
       const user = await User.findById(claim.user._id);
-      user.totalEarnings += claim.amount;
-      await user.save();
-    }
-
-    // If rejected, refund points to user AND remove from claimedMilestones
-    if (status === 'rejected') {
-      const user = await User.findById(claim.user._id);
-      user.points += claim.points;
-      // Remove the milestone from claimedMilestones so user can claim it again
-      if (user.claimedMilestones) {
-        user.claimedMilestones = user.claimedMilestones.filter(m => m !== claim.points);
-      }
+      applyClaimStatusEffects({ previousStatus, nextStatus, claim, user });
       await user.save();
     }
 
@@ -207,7 +207,7 @@ export const updateClaim = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Claim ${status} successfully`,
+      message: `Claim ${nextStatus} successfully`,
       data: updatedClaim,
     });
   } catch (error) {
