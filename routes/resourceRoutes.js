@@ -11,6 +11,7 @@ import {
   incrementDownload,
   getMyResources,
   fetchExternalResources,
+  getResourceFilterOptions,
 } from '../controllers/resourceController.js';
 import { protect, canPostResources, optionalAuth, superAdminOnly } from '../middleware/authMiddleware.js';
 
@@ -31,6 +32,7 @@ router.get('/my/resources', protect, getMyResources);
 
 // Public routes (optionalAuth allows super_admin to see all posts)
 router.get('/', optionalAuth, getResources);
+router.get('/filter-options', optionalAuth, getResourceFilterOptions);
 router.get('/grouped', getResourcesGrouped);
 router.get('/:id', optionalAuth, getResource);
 router.put('/:id/like', engagementLimiter, likeResource);

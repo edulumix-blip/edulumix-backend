@@ -1,57 +1,58 @@
 /**
  * Resource fetch cron: Dev.to, freeCodeCamp, Hashnode, YouTube, Medium, Hacker News.
- * Schedule: every 1 hour (default). Override via RESOURCE_FETCH_CRON_SCHEDULE.
+ * Default: every 40 hours (interval from process start), not tied to wall clock.
+ * Override hours via RESOURCE_FETCH_INTERVAL_HOURS.
  */
-import cron from 'node-cron';
 import { runExternalResourceFetch } from '../utils/runResourceFetch.js';
-import { runExternalBlogFetch } from '../utils/runBlogFetch.js';
 
 const ENABLED = process.env.RESOURCE_FETCH_CRON_ENABLED !== 'false';
-const SCHEDULE = process.env.RESOURCE_FETCH_CRON_SCHEDULE || '0 * * * *'; // Every hour at :00
-const TIMEZONE = process.env.RESOURCE_FETCH_CRON_TIMEZONE || 'Asia/Kolkata';
+const HOURS_RAW = process.env.RESOURCE_FETCH_INTERVAL_HOURS;
+const PARSED = Number.parseFloat(HOURS_RAW || '40', 10);
+const INTERVAL_HOURS = Number.isFinite(PARSED) && PARSED > 0 ? PARSED : 40;
+const INTERVAL_MS = INTERVAL_HOURS * 60 * 60 * 1000;
 
-let scheduledTask = null;
+let intervalId = null;
+let running = false;
 
 export function startDailyResourceFetchCron() {
   if (!ENABLED) {
-    console.log('⏸️  Daily resource fetch cron is disabled (RESOURCE_FETCH_CRON_ENABLED=false)');
-    return;
-  }
-
-  if (!cron.validate(SCHEDULE)) {
-    console.warn('⚠️  Invalid RESOURCE_FETCH_CRON_SCHEDULE:', SCHEDULE, '- cron not started');
+    console.log('⏸️  Resource fetch scheduler is disabled (RESOURCE_FETCH_CRON_ENABLED=false)');
     return;
   }
 
   const runFetch = async () => {
+    if (running) {
+      console.warn('⚠️  [Cron] Resource fetch skipped — previous run still in progress');
+      return;
+    }
+    running = true;
     const start = Date.now();
     try {
-      const [resResult, blogResult] = await Promise.all([
-        runExternalResourceFetch(),
-        runExternalBlogFetch(),
-      ]);
+      const resResult = await runExternalResourceFetch();
       const elapsed = ((Date.now() - start) / 1000).toFixed(1);
       console.log(
-        `📚 [Cron] Fetch done in ${elapsed}s: Resources created=${resResult.created}, ` +
-        `Blogs created=${blogResult.created} (devto=${resResult.devtoFetched}, medium=${resResult.mediumFetched}, hn=${resResult.hackernewsFetched})` +
-        (resResult.errors?.length ? `, errors=${resResult.errors.length}` : '')
+        `📚 [Cron] Resource fetch done in ${elapsed}s: created=${resResult.created}, ` +
+          `devto=${resResult.devtoFetched}, medium=${resResult.mediumFetched}, hn=${resResult.hackernewsFetched}` +
+          (resResult.errors?.length ? `, errors=${resResult.errors.length}` : '')
       );
     } catch (err) {
-      console.error('❌ [Cron] Fetch failed:', err.message);
+      console.error('❌ [Cron] Resource fetch failed:', err.message);
+    } finally {
+      running = false;
     }
   };
 
-  scheduledTask = cron.schedule(SCHEDULE, runFetch, {
-    timezone: TIMEZONE,
-  });
+  intervalId = setInterval(runFetch, INTERVAL_MS);
 
-  console.log(`⏰ Resource fetch cron: every 1 hour (${SCHEDULE}) - ${TIMEZONE}`);
+  console.log(
+    `⏰ Resource fetch scheduler: every ${INTERVAL_HOURS}h (${Math.round(INTERVAL_MS / 1000)}s interval)`
+  );
 }
 
 export function stopDailyResourceFetchCron() {
-  if (scheduledTask) {
-    scheduledTask.stop();
-    scheduledTask = null;
-    console.log('🛑 Daily resource fetch cron stopped');
+  if (intervalId) {
+    clearInterval(intervalId);
+    intervalId = null;
+    console.log('🛑 Resource fetch scheduler stopped');
   }
 }

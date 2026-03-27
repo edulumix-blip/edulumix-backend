@@ -12,6 +12,7 @@ import {
   toggleFeatured,
   getCoursesCount,
   fetchExternalCourses,
+  getCourseFilterOptions,
 } from '../controllers/courseController.js';
 import { protect, superAdminOnly } from '../middleware/authMiddleware.js';
 
@@ -28,6 +29,7 @@ router.put('/:id/toggle-featured', protect, superAdminOnly, toggleFeatured);
 
 // Public routes
 router.get('/', getCourses);
+router.get('/filter-options', getCourseFilterOptions);
 router.get('/featured', getFeaturedCourses);
 router.get('/count', getCoursesCount);
 

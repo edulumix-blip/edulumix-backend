@@ -1,12 +1,12 @@
 /**
  * Cron job: Fetch jobs from Adzuna + JSearch at scheduled intervals.
- * After fetch, sync closed status (mark jobs no longer in API results as Closed).
  */
 import cron from 'node-cron';
-import { runExternalJobFetch, syncClosedStatusFromSource } from '../utils/runJobFetch.js';
+import { runExternalJobFetch } from '../utils/runJobFetch.js';
 
 const ENABLED = process.env.JOB_FETCH_CRON_ENABLED !== 'false';
-const SCHEDULE = process.env.JOB_FETCH_CRON_SCHEDULE || '0 * * * *'; // Every hour (same as blog)
+// Daily 3:50 AM in JOB_FETCH_CRON_TIMEZONE (default Asia/Kolkata) — Adzuna + JSearch
+const SCHEDULE = process.env.JOB_FETCH_CRON_SCHEDULE || '50 3 * * *';
 const TIMEZONE = process.env.JOB_FETCH_CRON_TIMEZONE || 'Asia/Kolkata';
 
 let scheduledTask = null;
@@ -32,13 +32,6 @@ export function startDailyJobFetchCron() {
         `adzuna=${result.adzunaFetched}, jsearch=${result.jsearchFetched}` +
         (result.errors?.length ? `, errors=${result.errors.length}` : '')
       );
-      const sync = await syncClosedStatusFromSource(20, 2);
-      if (sync.closed > 0) {
-        console.log(`🔒 [Cron] Sync closed: ${sync.closed} jobs (adzuna=${sync.adzunaClosed}, jsearch=${sync.jsearchClosed})`);
-      }
-      if (sync.errors?.length) {
-        console.warn(`⚠️ [Cron] Sync closed had ${sync.errors.length} API error(s)`);
-      }
     } catch (err) {
       console.error('❌ [Cron] Job fetch failed:', err.message);
     }
@@ -48,7 +41,7 @@ export function startDailyJobFetchCron() {
     timezone: TIMEZONE,
   });
 
-  console.log(`⏰ Job fetch cron scheduled: every hour (${SCHEDULE}) - ${TIMEZONE}`);
+  console.log(`⏰ Job fetch cron: daily at 3:50 (${SCHEDULE}) - ${TIMEZONE}`);
 }
 
 export function stopDailyJobFetchCron() {

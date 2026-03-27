@@ -140,11 +140,17 @@ const mockTestSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    externalId: {
+      type: String,
+      default: '',
+    },
   },
   {
     timestamps: true,
   }
 );
+
+mockTestSchema.index({ externalId: 1 }, { sparse: true });
 
 // Generate slug before saving
 mockTestSchema.pre('save', function (next) {

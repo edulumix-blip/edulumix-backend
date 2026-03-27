@@ -58,7 +58,7 @@ export const getAllBlogs = async (req, res) => {
 // @access  Public
 export const getBlogs = async (req, res) => {
   try {
-    const { category, tag, search, page = 1, limit = 10 } = req.query;
+    const { category, tag, search, page = 1, limit = 10, sort } = req.query;
 
     const query = { isPublished: true };
 
@@ -73,9 +73,15 @@ export const getBlogs = async (req, res) => {
       query.$text = { $search: search };
     }
 
+    /** Default: newest. trending: views + likes (sponsored still pinned). */
+    let sortSpec = { isSponsored: -1, createdAt: -1 };
+    if (sort === 'trending') {
+      sortSpec = { isSponsored: -1, views: -1, likes: -1, createdAt: -1 };
+    }
+
     const blogs = await Blog.find(query)
       .populate('author', 'name email avatar role')
-      .sort({ isSponsored: -1, createdAt: -1 })
+      .sort(sortSpec)
       .limit(limit * 1)
       .skip((page - 1) * limit);
 

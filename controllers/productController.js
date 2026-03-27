@@ -1,30 +1,64 @@
 import DigitalProduct from '../models/DigitalProduct.js';
 import User from '../models/User.js';
+import {
+  digitalProductSortAndPaginateStages,
+  digitalProductPostedByLookup,
+} from '../utils/digitalProductListPipeline.js';
+
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const DIGITAL_PRODUCT_CATEGORY_ENUM = [
+  'AI Tools',
+  'Design & Creative',
+  'Entertainment & Streaming',
+  'Productivity & Office',
+  'Security & Utility',
+  'Education & Learning',
+  'Others',
+];
 
 // @desc    Get all products (public)
 // @route   GET /api/products
 // @access  Public
 export const getProducts = async (req, res) => {
   try {
-    const { category, subcategory, search, page = 1, limit = 12 } = req.query;
+    const {
+      category,
+      subcategory,
+      search,
+      isFeatured,
+      page = 1,
+      limit = 12,
+    } = req.query;
 
     const query = { isAvailable: true };
 
-    if (category) query.category = category;
-    if (subcategory) query.subcategory = { $regex: subcategory, $options: 'i' };
-    if (search) {
+    if (category && category !== 'All') query.category = category;
+    const subTrim = subcategory && String(subcategory).trim();
+    if (subTrim && subTrim !== 'All') query.subcategory = subTrim;
+    if (isFeatured === 'true') query.isFeatured = true;
+
+    const searchTrim = search && String(search).trim().slice(0, 120);
+    if (searchTrim) {
+      const rx = new RegExp(escapeRegex(searchTrim), 'i');
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { subcategory: { $regex: search, $options: 'i' } },
+        { name: { $regex: rx } },
+        { description: { $regex: rx } },
+        { subcategory: { $regex: rx } },
       ];
     }
 
-    const products = await DigitalProduct.find(query)
-      .populate('postedBy', 'name avatar')
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+    const limitNum = Math.max(1, parseInt(limit, 10) || 12);
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const skip = (pageNum - 1) * limitNum;
+
+    const pipeline = [
+      { $match: query },
+      ...digitalProductSortAndPaginateStages(skip, limitNum),
+      ...digitalProductPostedByLookup({ name: 1, avatar: 1 }),
+    ];
+
+    const products = await DigitalProduct.aggregate(pipeline);
 
     const total = await DigitalProduct.countDocuments(query);
 
@@ -32,8 +66,8 @@ export const getProducts = async (req, res) => {
       success: true,
       count: products.length,
       total,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
+      totalPages: Math.ceil(total / limitNum),
+      currentPage: pageNum,
       data: products,
     });
   } catch (error) {
@@ -41,6 +75,32 @@ export const getProducts = async (req, res) => {
       success: false,
       message: error.message,
     });
+  }
+};
+
+// @desc    Filter dropdown values for public product listing
+// @route   GET /api/products/filter-options
+// @access  Public
+export const getProductFilterOptions = async (req, res) => {
+  try {
+    const base = { isAvailable: true };
+    const rawSubs = await DigitalProduct.distinct('subcategory', base);
+    const subSet = new Set();
+    for (const s of rawSubs) {
+      const t = String(s || '').trim();
+      if (t) subSet.add(t);
+    }
+    const subcategories = [...subSet].sort((a, b) => a.localeCompare(b, 'en')).slice(0, 200);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        categories: DIGITAL_PRODUCT_CATEGORY_ENUM,
+        subcategories,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -64,11 +124,14 @@ export const getAllProducts = async (req, res) => {
       ];
     }
 
+    const lim = Math.max(parseInt(limit, 10) || 20, 1);
+    const pg = Math.max(parseInt(page, 10) || 1, 1);
+
     const products = await DigitalProduct.find(query)
       .populate('postedBy', 'name email avatar')
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(lim)
+      .skip((pg - 1) * lim);
 
     const total = await DigitalProduct.countDocuments(query);
 
@@ -85,8 +148,8 @@ export const getAllProducts = async (req, res) => {
       success: true,
       count: products.length,
       total,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
+      totalPages: Math.ceil(total / lim) || 1,
+      currentPage: pg,
       stats,
       data: products,
     });
@@ -103,10 +166,13 @@ export const getAllProducts = async (req, res) => {
 // @access  Public
 export const getFeaturedProducts = async (req, res) => {
   try {
-    const products = await DigitalProduct.find({ isAvailable: true, isFeatured: true })
-      .populate('postedBy', 'name avatar')
-      .sort({ createdAt: -1 })
-      .limit(8);
+    const pipeline = [
+      { $match: { isAvailable: true, isFeatured: true } },
+      ...digitalProductSortAndPaginateStages(0, 8),
+      ...digitalProductPostedByLookup({ name: 1, avatar: 1 }),
+    ];
+
+    const products = await DigitalProduct.aggregate(pipeline);
 
     res.status(200).json({
       success: true,
@@ -126,12 +192,18 @@ export const getFeaturedProducts = async (req, res) => {
 // @access  Public
 export const getProductsByCategory = async (req, res) => {
   try {
-    const products = await DigitalProduct.find({ 
-      category: req.params.category,
-      isAvailable: true 
-    })
-      .populate('postedBy', 'name avatar')
-      .sort({ createdAt: -1 });
+    const pipeline = [
+      {
+        $match: {
+          category: req.params.category,
+          isAvailable: true,
+        },
+      },
+      ...digitalProductSortAndPaginateStages(0, null),
+      ...digitalProductPostedByLookup({ name: 1, avatar: 1 }),
+    ];
+
+    const products = await DigitalProduct.aggregate(pipeline);
 
     res.status(200).json({
       success: true,
@@ -248,6 +320,7 @@ export const updateProduct = async (req, res) => {
       'whatsappNumber',
       'isAvailable',
       'isFeatured',
+      'externalId',
     ];
     const updateData = {};
     for (const field of allowedFields) {

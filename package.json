@@ -8,6 +8,11 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "seed": "node utils/seedSuperAdmin.js",
+    "seed:courses": "node scripts/seedTwentyCourses.mjs",
+    "seed:products": "node scripts/seedFiftyDigitalProducts.mjs",
+    "seed:mocktests": "node scripts/seedManyMockTests.mjs",
+    "migrate:jobs-others": "node scripts/migrateJobOthersToNonIt.mjs",
+    "jobs:open-all": "node scripts/openAllJobs.mjs",
     "test": "node --test tests/**/*.test.js"
   },
   "keywords": [

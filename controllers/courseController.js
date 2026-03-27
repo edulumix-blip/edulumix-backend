@@ -26,30 +26,69 @@ export const fetchExternalCourses = async (req, res) => {
 // @desc    Get all courses (public - only published)
 // @route   GET /api/courses
 // @access  Public
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const COURSE_CATEGORY_ENUM = [
+  'Web Development',
+  'Mobile Development',
+  'Data Science',
+  'Machine Learning',
+  'DevOps',
+  'Cybersecurity',
+  'Cloud Computing',
+  'UI/UX Design',
+  'Digital Marketing',
+  'Interview Prep',
+  'DSA',
+  'Programming Languages',
+  'Others',
+];
+
+const COURSE_LEVEL_ENUM = ['Beginner', 'Intermediate', 'Advanced', 'All Levels'];
+const COURSE_LANGUAGE_ENUM = ['English', 'Hindi', 'Bengali', 'Tamil', 'Telugu', 'Others'];
+
 export const getCourses = async (req, res) => {
   try {
-    const { category, level, language, search, isFree, page = 1, limit = 12 } = req.query;
+    const {
+      category,
+      level,
+      language,
+      search,
+      isFree,
+      isFeatured,
+      page = 1,
+      limit = 12,
+    } = req.query;
 
     const query = { isPublished: true };
 
-    if (category) query.category = category;
-    if (level) query.level = level;
-    if (language) query.language = language;
-    if (isFree !== undefined) query.isFree = isFree === 'true';
-    if (search) {
+    if (category && category !== 'All') query.category = category;
+    if (level && level !== 'All') query.level = level;
+    if (language && language !== 'All') query.language = language;
+    if (isFree !== undefined && isFree !== '' && isFree !== 'All') {
+      query.isFree = isFree === 'true';
+    }
+    if (isFeatured === 'true') query.isFeatured = true;
+
+    const searchTrim = search && String(search).trim().slice(0, 120);
+    if (searchTrim) {
+      const rx = new RegExp(escapeRegex(searchTrim), 'i');
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $regex: search, $options: 'i' } },
+        { title: { $regex: rx } },
+        { description: { $regex: rx } },
+        { tags: { $regex: rx } },
       ];
     }
+
+    const lim = Math.min(Math.max(parseInt(limit, 10) || 12, 1), 100);
+    const pg = Math.max(parseInt(page, 10) || 1, 1);
 
     const courses = await Course.find(query)
       .populate('postedBy', 'name avatar')
       .select('-lessons.videoUrl') // Don't expose video URLs in list
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(lim)
+      .skip((pg - 1) * lim);
 
     const total = await Course.countDocuments(query);
 
@@ -57,8 +96,8 @@ export const getCourses = async (req, res) => {
       success: true,
       count: courses.length,
       total,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
+      totalPages: Math.ceil(total / lim) || 1,
+      currentPage: pg,
       data: courses,
     });
   } catch (error) {
@@ -66,6 +105,46 @@ export const getCourses = async (req, res) => {
       success: false,
       message: error.message,
     });
+  }
+};
+
+// @desc    Filter dropdown values for public course listing
+// @route   GET /api/courses/filter-options
+// @access  Public
+export const getCourseFilterOptions = async (req, res) => {
+  try {
+    const base = { isPublished: true };
+    const [cats, levels, langs] = await Promise.all([
+      Course.distinct('category', base),
+      Course.distinct('level', base),
+      Course.distinct('language', base),
+    ]);
+
+    const categories = COURSE_CATEGORY_ENUM.filter((c) => cats.includes(c));
+    for (const c of cats.sort((a, b) => a.localeCompare(b))) {
+      if (!categories.includes(c)) categories.push(c);
+    }
+
+    const levelOptions = COURSE_LEVEL_ENUM.filter((l) => levels.includes(l));
+    for (const l of levels.sort((a, b) => a.localeCompare(b))) {
+      if (!levelOptions.includes(l)) levelOptions.push(l);
+    }
+
+    const languageOptions = COURSE_LANGUAGE_ENUM.filter((l) => langs.includes(l));
+    for (const l of langs.sort((a, b) => a.localeCompare(b))) {
+      if (!languageOptions.includes(l)) languageOptions.push(l);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        categories,
+        levels: levelOptions,
+        languages: languageOptions,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 

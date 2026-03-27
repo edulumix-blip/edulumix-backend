@@ -13,6 +13,7 @@ import connectDB from './config/db.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 import { startDailyJobFetchCron } from './cron/dailyJobFetch.js';
 import { startDailyResourceFetchCron } from './cron/dailyResourceFetch.js';
+import { startDailyBlogFetchCron } from './cron/dailyBlogFetch.js';
 import { startDailyCourseFetchCron } from './cron/dailyCourseFetch.js';
 
 // Route imports
@@ -39,6 +40,10 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
   process.exit(1);
 }
 
+if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY.startsWith('your_')) {
+  console.warn('⚠️  GROQ_API_KEY missing or placeholder — POST /api/chat will return "Chat service is not configured"');
+}
+
 // Connect to database
 connectDB();
 
@@ -47,6 +52,7 @@ if (cronEnabled) {
   // Start background schedulers only on designated instance(s)
   startDailyJobFetchCron();
   startDailyResourceFetchCron();
+  startDailyBlogFetchCron();
   startDailyCourseFetchCron();
 } else {
   console.log('⏸️  Cron jobs disabled (ENABLE_CRON_JOBS=false)');
@@ -117,13 +123,23 @@ if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist, { index: false }));
 }
 
-// General API rate limiting (100 req/15 min per IP)
+// General API rate limiting — strict in production; relaxed in development
+const isProduction = process.env.NODE_ENV === 'production';
+const skipApiRateLimit = process.env.DISABLE_API_RATE_LIMIT === 'true';
+const rateLimitFromEnv = Number.parseInt(process.env.RATE_LIMIT_MAX || '', 10);
+const apiMaxPerWindow = Number.isFinite(rateLimitFromEnv) && rateLimitFromEnv > 0
+  ? rateLimitFromEnv
+  : isProduction
+    ? 100
+    : 5000;
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: apiMaxPerWindow,
   message: { success: false, message: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => skipApiRateLimit,
 });
 app.use('/api', apiLimiter);
 

@@ -12,6 +12,7 @@ import {
   getProductsCount,
   toggleAvailability,
   toggleFeatured,
+  getProductFilterOptions,
 } from '../controllers/productController.js';
 import { protect, canPostProducts, superAdminOnly } from '../middleware/authMiddleware.js';
 
@@ -27,6 +28,7 @@ router.put('/:id/toggle-featured', protect, superAdminOnly, toggleFeatured);
 
 // Public routes
 router.get('/', getProducts);
+router.get('/filter-options', getProductFilterOptions);
 router.get('/featured', getFeaturedProducts);
 router.get('/count', getProductsCount);
 router.get('/category/:category', getProductsByCategory);

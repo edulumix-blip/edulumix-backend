@@ -1,6 +1,6 @@
 import Job from '../models/Job.js';
 import User from '../models/User.js';
-import { runExternalJobFetch, syncClosedStatusFromSource } from '../utils/runJobFetch.js';
+import { runExternalJobFetch } from '../utils/runJobFetch.js';
 
 // @desc    Fetch jobs from Adzuna + JSearch and store in DB (Super Admin only)
 // @route   POST /api/jobs/fetch-external
@@ -24,61 +24,74 @@ export const fetchExternalJobs = async (req, res) => {
   }
 };
 
-// @desc    Sync closed status from Adzuna/JSearch (mark jobs no longer in API results as Closed)
-// @route   POST /api/jobs/sync-closed
-// @access  Private (super_admin only)
-export const syncClosedJobs = async (req, res) => {
-  try {
-    const { adzunaLimit = 20, jsearchPages = 2 } = req.body || {};
-    const data = await syncClosedStatusFromSource(adzunaLimit, jsearchPages);
-    res.status(200).json({
-      success: true,
-      message: data.closed > 0 ? `${data.closed} job(s) marked as Closed` : 'No jobs to sync (all still open on source)',
-      data,
-    });
-  } catch (error) {
-    console.error('syncClosedJobs error:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
 // @desc    Get all jobs (public, super_admin sees all including deleted)
 // @route   GET /api/jobs
 // @access  Public (optionalAuth for super_admin)
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export const getJobs = async (req, res) => {
   try {
-    const { 
-      category, 
-      status, 
-      experience, 
-      search, 
-      page = 1, 
-      limit = 12 
+    const {
+      category,
+      status,
+      experience,
+      search,
+      page = 1,
+      limit = 12,
+      postedBy,
+      location: locationFilter,
+      city,
     } = req.query;
 
-    const query = {};
+    const clauses = [];
 
     // Public/contributors should not see soft-deleted jobs
     // Super admin can see all jobs (including soft-deleted)
     if (!req.user || req.user.role !== 'super_admin') {
-      query.isDeleted = { $ne: true }; // Show posts where isDeleted is false OR doesn't exist
+      clauses.push({ isDeleted: { $ne: true } });
     }
 
-    if (category && category !== 'All') query.category = category;
-    if (status) query.status = status;
-    if (experience) query.experience = experience;
-    if (search) {
-      query.$text = { $search: search };
+    if (category && category !== 'All') clauses.push({ category });
+    if (status && status !== 'All') clauses.push({ status });
+    if (experience && experience !== 'All') clauses.push({ experience });
+
+    const locExact = locationFilter && String(locationFilter).trim();
+    if (locExact && locExact !== 'All') {
+      clauses.push({ location: locExact });
     }
+
+    const cityTrim = city && String(city).trim();
+    if (cityTrim && cityTrim !== 'All') {
+      const rx = new RegExp(`^${escapeRegex(cityTrim)}(\\s*,|$)`, 'i');
+      clauses.push({ location: { $regex: rx } });
+    }
+    if (postedBy && req.user?.role === 'super_admin') {
+      clauses.push({ postedBy });
+    }
+
+    const searchTrim = search && String(search).trim().slice(0, 120);
+    if (searchTrim) {
+      const rx = new RegExp(escapeRegex(searchTrim), 'i');
+      clauses.push({
+        $or: [
+          { title: { $regex: rx } },
+          { company: { $regex: rx } },
+          { location: { $regex: rx } },
+        ],
+      });
+    }
+
+    const query =
+      clauses.length === 0 ? {} : clauses.length === 1 ? clauses[0] : { $and: clauses };
+
+    const lim = Math.min(Math.max(parseInt(limit, 10) || 12, 1), 100);
+    const pg = Math.max(parseInt(page, 10) || 1, 1);
 
     const jobs = await Job.find(query)
       .populate('postedBy', 'name email avatar role')
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(lim)
+      .skip((pg - 1) * lim);
 
     const total = await Job.countDocuments(query);
 
@@ -86,9 +99,95 @@ export const getJobs = async (req, res) => {
       success: true,
       count: jobs.length,
       total,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
+      totalPages: Math.ceil(total / lim) || 1,
+      currentPage: pg,
       data: jobs,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Distinct filter values for jobs listing UI (dropdowns)
+// @route   GET /api/jobs/filter-options
+// @access  Public
+export const getJobFilterOptions = async (req, res) => {
+  try {
+    const base =
+      !req.user || req.user.role !== 'super_admin' ? { isDeleted: { $ne: true } } : {};
+
+    const [locations, experiencesInDb] = await Promise.all([
+      Job.distinct('location', base),
+      Job.distinct('experience', base),
+    ]);
+
+    const locList = locations.filter(Boolean).sort((a, b) => a.localeCompare(b, 'en'));
+    const locationsCapped = locList.slice(0, 300);
+
+    const expOrder = ['Fresher', '1 Year', '2 Years', '3 Years', '4 Years', '5+ Years'];
+    const experiences = expOrder.filter((e) => experiencesInDb.includes(e));
+
+    const citySet = new Set();
+    for (const loc of locList) {
+      const part = String(loc).split(',')[0].trim();
+      if (part) citySet.add(part);
+    }
+    const cities = [...citySet].sort((a, b) => a.localeCompare(b, 'en')).slice(0, 250);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        locations: locationsCapped,
+        cities,
+        experiences,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const JOB_CATEGORY_KEYS = [
+  'IT Job',
+  'Non IT Job',
+  'Walk In Drive',
+  'Govt Job',
+  'Internship',
+  'Part Time Job',
+  'Remote Job',
+  'Others',
+];
+
+// @desc    Total job count for public jobs listing UI (hero)
+// @route   GET /api/jobs/stats
+// @access  Public
+export const getJobStats = async (req, res) => {
+  try {
+    const baseQuery =
+      !req.user || req.user.role !== 'super_admin' ? { isDeleted: { $ne: true } } : {};
+
+    const total = await Job.countDocuments(baseQuery);
+
+    const data = { total };
+    if (req.user?.role === 'super_admin') {
+      data.open = await Job.countDocuments({ ...baseQuery, status: 'Open' });
+      data.closed = await Job.countDocuments({ ...baseQuery, status: 'Closed' });
+      const viewsAgg = await Job.aggregate([
+        { $match: baseQuery },
+        { $group: { _id: null, totalViews: { $sum: { $ifNull: ['$views', 0] } } } },
+      ]);
+      data.totalViews = viewsAgg[0]?.totalViews ?? 0;
+    }
+
+    res.status(200).json({
+      success: true,
+      data,
     });
   } catch (error) {
     res.status(500).json({
@@ -103,16 +202,7 @@ export const getJobs = async (req, res) => {
 // @access  Public
 export const getJobsGrouped = async (req, res) => {
   try {
-    const categories = [
-      'IT Job',
-      'Non IT Job',
-      'Walk In Drive',
-      'Govt Job',
-      'Internship',
-      'Part Time Job',
-      'Remote Job',
-      'Others',
-    ];
+    const categories = [...JOB_CATEGORY_KEYS];
 
     const groupedJobs = {};
 

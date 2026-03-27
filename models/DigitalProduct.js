@@ -66,11 +66,18 @@ const digitalProductSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    /** Optional id for idempotent seed scripts (e.g. edulumix-digital-seed-01) */
+    externalId: {
+      type: String,
+      default: '',
+    },
   },
   {
     timestamps: true,
   }
 );
+
+digitalProductSchema.index({ externalId: 1 }, { sparse: true });
 
 // Virtual for discount percentage
 digitalProductSchema.virtual('discountPercentage').get(function () {

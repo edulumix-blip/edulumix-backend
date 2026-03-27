@@ -1,34 +1,77 @@
 import MockTest from '../models/MockTest.js';
 import User from '../models/User.js';
 
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const MOCK_TEST_CATEGORY_ENUM = [
+  'Aptitude',
+  'Logical Reasoning',
+  'Verbal Ability',
+  'Technical - Programming',
+  'Technical - DSA',
+  'Technical - DBMS',
+  'Technical - OS',
+  'Technical - CN',
+  'Technical - Web Dev',
+  'Company Specific',
+  'Gate',
+  'Government Exams',
+  'Others',
+];
+
+const MOCK_TEST_DIFFICULTY_ENUM = ['Easy', 'Medium', 'Hard', 'Mixed'];
+
 // @desc    Get all mock tests (public - only published)
 // @route   GET /api/mocktests
 // @access  Public
 export const getMockTests = async (req, res) => {
   try {
-    const { category, difficulty, company, search, isFree, page = 1, limit = 12 } = req.query;
+    const {
+      category,
+      difficulty,
+      company,
+      search,
+      isFree,
+      isFeatured,
+      page = 1,
+      limit = 12,
+    } = req.query;
 
     const query = { isPublished: true };
 
-    if (category) query.category = category;
-    if (difficulty) query.difficulty = difficulty;
-    if (company) query.company = { $regex: company, $options: 'i' };
-    if (isFree !== undefined) query.isFree = isFree === 'true';
-    if (search) {
+    if (category && category !== 'All') query.category = category;
+    if (difficulty && difficulty !== 'All') query.difficulty = difficulty;
+
+    const companyTrim = company && String(company).trim();
+    if (companyTrim && companyTrim !== 'All') {
+      query.company = new RegExp(`^${escapeRegex(companyTrim)}$`, 'i');
+    }
+
+    if (isFree !== undefined && isFree !== '' && isFree !== 'All') {
+      query.isFree = isFree === 'true';
+    }
+    if (isFeatured === 'true') query.isFeatured = true;
+
+    const searchTrim = search && String(search).trim().slice(0, 120);
+    if (searchTrim) {
+      const rx = new RegExp(escapeRegex(searchTrim), 'i');
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $regex: search, $options: 'i' } },
-        { company: { $regex: search, $options: 'i' } },
+        { title: { $regex: rx } },
+        { description: { $regex: rx } },
+        { tags: { $regex: rx } },
+        { company: { $regex: rx } },
       ];
     }
+
+    const lim = Math.min(Math.max(parseInt(limit, 10) || 12, 1), 100);
+    const pg = Math.max(parseInt(page, 10) || 1, 1);
 
     const tests = await MockTest.find(query)
       .populate('postedBy', 'name avatar')
       .select('-questions') // Don't expose questions in list
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(lim)
+      .skip((pg - 1) * lim);
 
     const total = await MockTest.countDocuments(query);
 
@@ -36,8 +79,8 @@ export const getMockTests = async (req, res) => {
       success: true,
       count: tests.length,
       total,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
+      totalPages: Math.ceil(total / lim) || 1,
+      currentPage: pg,
       data: tests,
     });
   } catch (error) {
@@ -45,6 +88,42 @@ export const getMockTests = async (req, res) => {
       success: false,
       message: error.message,
     });
+  }
+};
+
+// @desc    Filter dropdown values for public mock test listing
+// @route   GET /api/mocktests/filter-options
+// @access  Public
+export const getMockTestFilterOptions = async (req, res) => {
+  try {
+    const base = { isPublished: true };
+    const [cats, companiesRaw] = await Promise.all([
+      MockTest.distinct('category', base),
+      MockTest.distinct('company', base),
+    ]);
+
+    const categories = MOCK_TEST_CATEGORY_ENUM.filter((c) => cats.includes(c));
+    for (const c of cats.sort((a, b) => a.localeCompare(b))) {
+      if (!categories.includes(c)) categories.push(c);
+    }
+
+    const companySet = new Set();
+    for (const c of companiesRaw) {
+      const t = String(c || '').trim();
+      if (t) companySet.add(t);
+    }
+    const companies = [...companySet].sort((a, b) => a.localeCompare(b, 'en')).slice(0, 150);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        categories,
+        difficulties: MOCK_TEST_DIFFICULTY_ENUM,
+        companies,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -253,6 +332,7 @@ export const updateMockTest = async (req, res) => {
       'isFeatured',
       'whatsappNumber',
       'passingMarks',
+      'externalId',
     ];
     const updateData = {};
     for (const field of allowedFields) {

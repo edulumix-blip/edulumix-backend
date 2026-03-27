@@ -2,6 +2,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import {
   getJobs,
+  getJobStats,
   getJobsGrouped,
   getJob,
   getJobBySlug,
@@ -11,7 +12,7 @@ import {
   likeJob,
   getMyJobs,
   fetchExternalJobs,
-  syncClosedJobs,
+  getJobFilterOptions,
 } from '../controllers/jobController.js';
 import { protect, canPostJobs, optionalAuth, superAdminOnly } from '../middleware/authMiddleware.js';
 
@@ -24,15 +25,16 @@ const engagementLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Super Admin only - fetch external jobs + sync closed status (MUST be before /:id)
+// Super Admin only - fetch external jobs (MUST be before /:id)
 router.post('/fetch-external', protect, superAdminOnly, fetchExternalJobs);
-router.post('/sync-closed', protect, superAdminOnly, syncClosedJobs);
 
 // Protected routes (MUST come before parameterized routes)
 router.get('/my/jobs', protect, getMyJobs);
 
 // Public routes (optionalAuth allows super_admin to see all posts)
 router.get('/', optionalAuth, getJobs);
+router.get('/stats', optionalAuth, getJobStats);
+router.get('/filter-options', optionalAuth, getJobFilterOptions);
 router.get('/grouped', optionalAuth, getJobsGrouped);
 router.get('/slug/:slug', optionalAuth, getJobBySlug);
 router.get('/:id', optionalAuth, getJob);

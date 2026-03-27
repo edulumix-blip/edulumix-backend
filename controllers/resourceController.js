@@ -2,6 +2,18 @@ import Resource from '../models/Resource.js';
 import User from '../models/User.js';
 import { runExternalResourceFetch } from '../utils/runResourceFetch.js';
 
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const RESOURCE_CATEGORY_KEYS = [
+  'Software Notes',
+  'Interview Notes',
+  'Tools & Technology',
+  'Trending Technology',
+  'Video Resources',
+  'Software Project',
+  'Hardware Project',
+];
+
 // @desc    Fetch resources from Dev.to, freeCodeCamp, Hashnode, YouTube (Super Admin only)
 // @route   POST /api/resources/fetch-external
 // @access  Private (super_admin only)
@@ -28,7 +40,15 @@ export const fetchExternalResources = async (req, res) => {
 // @access  Public (optionalAuth for super_admin)
 export const getResources = async (req, res) => {
   try {
-    const { category, subcategory, search, page = 1, limit = 12 } = req.query;
+    const {
+      category,
+      subcategory,
+      search,
+      page = 1,
+      limit = 12,
+      source,
+      isVideo,
+    } = req.query;
 
     const query = {};
 
@@ -38,20 +58,27 @@ export const getResources = async (req, res) => {
       query.isDeleted = { $ne: true }; // Show posts where isDeleted is false OR doesn't exist
     }
 
-    if (category) query.category = category;
-    if (subcategory) query.subcategory = { $regex: subcategory, $options: 'i' };
-    if (search) {
-      query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-      ];
+    if (category && category !== 'All') query.category = category;
+    const subTrim = subcategory && String(subcategory).trim();
+    if (subTrim && subTrim !== 'All') query.subcategory = subTrim;
+    if (source && source !== 'All') query.source = source;
+    if (isVideo === 'true') query.isVideo = true;
+    if (isVideo === 'false') query.isVideo = false;
+
+    const searchTrim = search && String(search).trim().slice(0, 120);
+    if (searchTrim) {
+      const rx = new RegExp(escapeRegex(searchTrim), 'i');
+      query.$or = [{ title: { $regex: rx } }, { description: { $regex: rx } }];
     }
+
+    const lim = Math.min(Math.max(parseInt(limit, 10) || 12, 1), 100);
+    const pg = Math.max(parseInt(page, 10) || 1, 1);
 
     const resources = await Resource.find(query)
       .populate('postedBy', 'name email avatar role')
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(lim)
+      .skip((pg - 1) * lim);
 
     const total = await Resource.countDocuments(query);
 
@@ -59,8 +86,8 @@ export const getResources = async (req, res) => {
       success: true,
       count: resources.length,
       total,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
+      totalPages: Math.ceil(total / lim) || 1,
+      currentPage: pg,
       data: resources,
     });
   } catch (error) {
@@ -68,6 +95,53 @@ export const getResources = async (req, res) => {
       success: false,
       message: error.message,
     });
+  }
+};
+
+// @desc    Distinct values for resource listing filters
+// @route   GET /api/resources/filter-options
+// @access  Public
+export const getResourceFilterOptions = async (req, res) => {
+  try {
+    const base =
+      !req.user || req.user.role !== 'super_admin' ? { isDeleted: { $ne: true } } : {};
+
+    const [rawSubs, sourcesInDb] = await Promise.all([
+      Resource.distinct('subcategory', base),
+      Resource.distinct('source', base),
+    ]);
+
+    const subSet = new Set();
+    for (const s of rawSubs) {
+      const t = String(s || '').trim();
+      if (t) subSet.add(t);
+    }
+    const subcategories = [...subSet].sort((a, b) => a.localeCompare(b, 'en')).slice(0, 200);
+
+    const sourceOrder = [
+      'manual',
+      'youtube',
+      'devto',
+      'freecodecamp',
+      'hashnode',
+      'medium',
+      'hackernews',
+    ];
+    const sources = sourceOrder.filter((s) => sourcesInDb.includes(s));
+    for (const s of sourcesInDb.sort()) {
+      if (!sources.includes(s)) sources.push(s);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        categories: RESOURCE_CATEGORY_KEYS,
+        subcategories,
+        sources,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 

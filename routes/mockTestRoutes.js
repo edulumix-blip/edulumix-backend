@@ -12,6 +12,7 @@ import {
   toggleFeatured,
   submitTestResult,
   getMockTestsCount,
+  getMockTestFilterOptions,
 } from '../controllers/mockTestController.js';
 import { protect, superAdminOnly } from '../middleware/authMiddleware.js';
 
@@ -25,6 +26,7 @@ router.put('/:id/toggle-featured', protect, superAdminOnly, toggleFeatured);
 
 // Public routes
 router.get('/', getMockTests);
+router.get('/filter-options', getMockTestFilterOptions);
 router.get('/featured', getFeaturedMockTests);
 router.get('/count', getMockTestsCount);
 
